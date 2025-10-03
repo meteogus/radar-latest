@@ -1,8 +1,14 @@
-# Use official Node.js image
 FROM node:22-slim
 
-# Install system dependencies Puppeteer needs
+# Install system dependencies for Puppeteer + canvas
 RUN apt-get update && apt-get install -y \
+    build-essential \
+    python3 \
+    libcairo2-dev \
+    libpango1.0-dev \
+    libjpeg-dev \
+    libgif-dev \
+    librsvg2-dev \
     wget \
     ca-certificates \
     fonts-liberation \
@@ -28,7 +34,7 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /usr/src/app
 
-# Copy package.json and install dependencies
+# Copy package.json and install
 COPY package.json package-lock.json* ./
 RUN npm install
 
@@ -38,5 +44,5 @@ COPY . .
 # Expose port
 EXPOSE 10000
 
-# Start app
+# Start server
 CMD ["npm", "start"]
