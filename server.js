@@ -9,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const IMAGE_PATH = 'radar-latest.png';
 
-// Serve static files (your radar image)
+// Serve all files in project folder
 app.use(express.static(__dirname));
 
 async function fetchRadar() {
@@ -23,15 +23,19 @@ async function fetchRadar() {
                 '--disable-software-rasterizer'
             ]
         });
-
         const page = await browser.newPage();
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
-        // Hide cookies bar
-        await page.evaluate(() => {
-            const cookieBanner = document.querySelector('#cookies-popup, .cookies-bar, .cookie-consent');
-            if (cookieBanner) cookieBanner.style.display = 'none';
-        });
+        // Wait for the cookies banner if it appears and hide it
+        try {
+            await page.waitForSelector('#cookies-popup, .cookies-bar, .cookie-consent', { timeout: 5000 });
+            await page.evaluate(() => {
+                const cookieBanner = document.querySelector('#cookies-popup, .cookies-bar, .cookie-consent');
+                if (cookieBanner) cookieBanner.style.display = 'none';
+            });
+        } catch (err) {
+            console.log('No cookies bar found.');
+        }
 
         const screenshotBuffer = await page.screenshot();
 
@@ -41,21 +45,21 @@ async function fetchRadar() {
         const ctx = canvas.getContext('2d');
 
         ctx.drawImage(img, 0, 0);
-        ctx.font = '20px sans-serif';
-        ctx.fillStyle = 'yellow';
-        ctx.textBaseline = 'top';
 
-        const timestamp = new Intl.DateTimeFormat('en-GB', {
+        // Athens local time
+        const athensTime = new Date().toLocaleString('en-GB', {
             timeZone: 'Europe/Athens',
-            day: 'numeric',
-            month: 'numeric',
+            day: '2-digit',
+            month: '2-digit',
             year: 'numeric',
             hour: '2-digit',
             minute: '2-digit',
-            second: '2-digit'
-        }).format(new Date());
+            hour12: false
+        });
 
-        ctx.fillText(timestamp, 10, 10); // upper-left corner
+        ctx.font = '22px sans-serif';
+        ctx.fillStyle = 'yellow';
+        ctx.fillText(athensTime, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
