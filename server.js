@@ -3,7 +3,6 @@ const express = require('express');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
 const cron = require('node-cron');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -15,7 +14,6 @@ app.use(express.static(__dirname));
 async function fetchRadar() {
     try {
         console.log('Fetching radar image...');
-
         const browser = await puppeteer.launch({
             args: [
                 '--no-sandbox',
@@ -24,38 +22,29 @@ async function fetchRadar() {
                 '--disable-software-rasterizer'
             ]
         });
-
         const page = await browser.newPage();
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
-        // Click cookie banner if it appears
-        try {
-            await page.click('#cookie-banner button, .cookie-accept, [aria-label="Accept cookies"]', { timeout: 3000 });
-        } catch (err) {
-            // Ignore if cookie banner not found
-        }
+        // Remove cookie banner
+        await page.evaluate(() => {
+            const cookieBanner = document.querySelector('div.cookie-banner, .cookie-consent, #cookie-bar'); 
+            if (cookieBanner) cookieBanner.remove();
+        });
 
         const screenshotBuffer = await page.screenshot();
 
-        // Load image in canvas
+        // Add timestamp (Athens local time)
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
 
         ctx.drawImage(img, 0, 0);
-
-        // Timestamp in Athens local time
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens' });
-
-        // Draw timestamp top-left, yellow with black outline
-        ctx.font = '24px sans-serif';
+        ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 2;
-        ctx.strokeText(timestamp, 10, 30);
-        ctx.fillText(timestamp, 10, 30);
 
-        // Save PNG
+        const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Europe/Athens' });
+        ctx.fillText(timestamp, 10, 30); // top-left corner
+
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
         stream.pipe(out);
@@ -70,7 +59,15 @@ async function fetchRadar() {
 // Fetch every 5 minutes
 cron.schedule('*/5 * * * *', fetchRadar);
 
-// Start server
+// Express route
+app.get(`/${IMAGE_PATH}`, (req, res) => {
+    if (fs.existsSync(IMAGE_PATH)) {
+        res.sendFile(`${__dirname}/${IMAGE_PATH}`);
+    } else {
+        res.status(404).send('Image not found yet.');
+    }
+});
+
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
