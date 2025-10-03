@@ -12,13 +12,14 @@ const radarFile = path.join(__dirname, "radar-latest.png");
 async function fetchRadar() {
   console.log("Fetching radar image...");
 
+  // Launch Puppeteer with full Chromium
   const browser = await puppeteer.launch({
     args: ["--no-sandbox", "--disable-setuid-sandbox"],
     headless: "new"
   });
-  const page = await browser.newPage();
 
   try {
+    const page = await browser.newPage();
     await page.goto("https://nowcast.meteo.noa.gr/el/radar/", {
       waitUntil: "networkidle2",
       timeout: 0
