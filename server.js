@@ -6,7 +6,7 @@ const path = require("path");
 const { createCanvas, loadImage } = require("canvas");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000; // Render sets $PORT
 const radarFile = path.join(__dirname, "radar-latest.png");
 
 async function fetchRadar() {
@@ -41,7 +41,7 @@ async function fetchRadar() {
 
     ctx.drawImage(img, 0, 0);
 
-    // Black timestamp at bottom-left
+    // Black timestamp bottom-left
     const timestamp = new Date().toLocaleString("el-GR", { timeZone: "Europe/Athens" });
     ctx.font = "24px Arial";
     ctx.fillStyle = "black";
@@ -60,9 +60,13 @@ async function fetchRadar() {
   }
 }
 
+// Run once at start
 fetchRadar();
+
+// Schedule every 5 minutes
 cron.schedule("*/5 * * * *", fetchRadar);
 
+// Serve radar image
 app.get("/radar-latest.png", (req, res) => {
   if (fs.existsSync(radarFile)) {
     res.sendFile(radarFile);
