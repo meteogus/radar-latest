@@ -61,8 +61,8 @@ async function fetchRadar() {
     }
 }
 
-// Fetch every 5 minutes
-cron.schedule('*/5 * * * *', fetchRadar);
+// Fetch every 10 minutes
+cron.schedule('*/10 * * * *', fetchRadar);
 
 // Express route
 app.get(`/${IMAGE_PATH}`, (req, res) => {
@@ -77,3 +77,4 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
 });
+
