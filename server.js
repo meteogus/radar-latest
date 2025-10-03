@@ -1,81 +1,62 @@
-const express = require("express");
-const puppeteer = require("puppeteer");
-const cron = require("node-cron");
-const fs = require("fs");
-const path = require("path");
-const { createCanvas, loadImage } = require("canvas");
+const express = require('express');
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
+const cron = require('node-cron');
+const { createCanvas, loadImage } = require('canvas');
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render sets $PORT
-const radarFile = path.join(__dirname, "radar-latest.png");
+const PORT = process.env.PORT || 10000;
+const IMAGE_PATH = path.join(__dirname, 'radar-latest.png');
 
 async function fetchRadar() {
-  console.log("Fetching radar image...");
-
-  // Launch Puppeteer with full Chromium
-  const browser = await puppeteer.launch({
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    headless: "new"
-  });
-
-  try {
+    console.log('Fetching radar image...');
+    const browser = await puppeteer.launch({
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
     const page = await browser.newPage();
-    await page.goto("https://nowcast.meteo.noa.gr/el/radar/", {
-      waitUntil: "networkidle2",
-      timeout: 0
+    await page.setViewport({ width: 750, height: 533 });
+    await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
+
+    const canvasData = await page.evaluate(() => {
+        const canvas = document.querySelector('canvas.leaflet-layer.velocity-overlay');
+        return canvas.toDataURL();
     });
 
-    await page.waitForSelector("canvas.leaflet-layer");
-
-    const tempFile = path.join(__dirname, "temp.png");
-    const canvas = await page.$("canvas.leaflet-layer");
-    await canvas.screenshot({ path: tempFile });
-
     await browser.close();
 
-    const img = await loadImage(tempFile);
-    const width = img.width;
-    const height = img.height;
+    // Create canvas and add timestamp
+    const base64Data = canvasData.replace(/^data:image\/png;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    const img = await loadImage(buffer);
 
-    const c = createCanvas(width, height);
-    const ctx = c.getContext("2d");
-
+    const c = createCanvas(img.width, img.height);
+    const ctx = c.getContext('2d');
     ctx.drawImage(img, 0, 0);
 
-    // Black timestamp bottom-left
-    const timestamp = new Date().toLocaleString("el-GR", { timeZone: "Europe/Athens" });
-    ctx.font = "24px Arial";
-    ctx.fillStyle = "black";
-    ctx.fillText(timestamp, 10, height - 20);
+    // Draw black timestamp bottom-left
+    const timestamp = new Date().toLocaleString();
+    ctx.fillStyle = 'black';
+    ctx.font = '20px Arial';
+    ctx.fillText(timestamp, 10, img.height - 10);
 
-    const out = fs.createWriteStream(radarFile);
+    const out = fs.createWriteStream(IMAGE_PATH);
     const stream = c.createPNGStream();
     stream.pipe(out);
-    out.on("finish", () => console.log("Radar with timestamp saved:", radarFile));
-
-    fs.unlinkSync(tempFile);
-
-  } catch (err) {
-    console.error("Error fetching radar:", err);
-    await browser.close();
-  }
+    out.on('finish', () => console.log('Radar saved with timestamp:', IMAGE_PATH));
 }
 
-// Run once at start
+// Fetch every 5 minutes
+cron.schedule('*/5 * * * *', fetchRadar);
+
+// First fetch immediately
 fetchRadar();
 
-// Schedule every 5 minutes
-cron.schedule("*/5 * * * *", fetchRadar);
-
-// Serve radar image
-app.get("/radar-latest.png", (req, res) => {
-  if (fs.existsSync(radarFile)) {
-    res.sendFile(radarFile);
-  } else {
-    res.status(404).send("Radar not available yet");
-  }
+// Serve image
+app.get('/radar-latest.png', (req, res) => {
+    res.sendFile(IMAGE_PATH);
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 });
