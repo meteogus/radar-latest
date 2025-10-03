@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const IMAGE_PATH = 'radar-latest.png';
 
-// Serve all files in project folder
+// Serve all files in project folder (so /radar-latest.png works)
 app.use(express.static(__dirname));
 
 async function fetchRadar() {
@@ -23,20 +23,22 @@ async function fetchRadar() {
             ]
         });
         const page = await browser.newPage();
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
-        // Hide cookies bar robustly
-        await page.evaluate(() => {
-            const interval = setInterval(() => {
-                const cookieBanner = document.querySelector('#cookies-popup, .cookies-bar, .cookie-consent');
-                if (cookieBanner) cookieBanner.style.display = 'none';
-            }, 200); // check every 200ms
-            setTimeout(() => clearInterval(interval), 5000); // stop after 5s
+        // Optional: block cookies bar
+        await page.setRequestInterception(true);
+        page.on('request', (req) => {
+            if (req.url().includes('cookie') || req.url().includes('consent')) {
+                req.abort();
+            } else {
+                req.continue();
+            }
         });
+
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (keep your current format)
+        // Add timestamp in Athens local time, day/month/year
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -44,8 +46,9 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString(); // unchanged
-        ctx.fillText(timestamp, 10, 30); // upper-left corner
+
+        const athensTime = new Date().toLocaleString("en-GB", { timeZone: "Europe/Athens" });
+        ctx.fillText(athensTime, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
