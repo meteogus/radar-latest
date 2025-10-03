@@ -1,3 +1,4 @@
+
 const puppeteer = require('puppeteer');
 const express = require('express');
 const fs = require('fs');
@@ -8,7 +9,7 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const IMAGE_PATH = 'radar-latest.png';
 
-// Serve all files in project folder
+// Serve static files (your radar image)
 app.use(express.static(__dirname));
 
 async function fetchRadar() {
@@ -22,18 +23,19 @@ async function fetchRadar() {
                 '--disable-software-rasterizer'
             ]
         });
+
         const page = await browser.newPage();
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
-        // Remove cookie banner
+        // Hide cookies bar
         await page.evaluate(() => {
-            const cookieBanner = document.querySelector('div.cookie-banner, .cookie-consent, #cookie-bar'); 
-            if (cookieBanner) cookieBanner.remove();
+            const cookieBanner = document.querySelector('#cookies-popup, .cookies-bar, .cookie-consent');
+            if (cookieBanner) cookieBanner.style.display = 'none';
         });
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (Athens local time)
+        // Add timestamp
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -41,9 +43,19 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
+        ctx.textBaseline = 'top';
 
-        const timestamp = new Date().toLocaleString('en-US', { timeZone: 'Europe/Athens' });
-        ctx.fillText(timestamp, 10, 30); // top-left corner
+        const timestamp = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Europe/Athens',
+            day: 'numeric',
+            month: 'numeric',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }).format(new Date());
+
+        ctx.fillText(timestamp, 10, 10); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
