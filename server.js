@@ -1,62 +1,53 @@
-const express = require('express');
 const puppeteer = require('puppeteer');
+const express = require('express');
 const fs = require('fs');
-const path = require('path');
-const cron = require('node-cron');
 const { createCanvas, loadImage } = require('canvas');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
-const IMAGE_PATH = path.join(__dirname, 'radar-latest.png');
+const FILE_PATH = 'radar-latest.png';
+const URL = 'https://nowcast.meteo.noa.gr/el/radar/';
 
 async function fetchRadar() {
     console.log('Fetching radar image...');
-    const browser = await puppeteer.launch({
-        args: ['--no-sandbox', '--disable-setuid-sandbox']
-    });
+    const browser = await puppeteer.launch({ args: ['--no-sandbox', '--disable-setuid-sandbox'] });
     const page = await browser.newPage();
-    await page.setViewport({ width: 750, height: 533 });
-    await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
+    await page.goto(URL, { waitUntil: 'networkidle2' });
+    
+    // Take screenshot of the full page
+    const screenshotBuffer = await page.screenshot();
 
-    const canvasData = await page.evaluate(() => {
-        const canvas = document.querySelector('canvas.leaflet-layer.velocity-overlay');
-        return canvas.toDataURL();
-    });
-
-    await browser.close();
-
-    // Create canvas and add timestamp
-    const base64Data = canvasData.replace(/^data:image\/png;base64,/, '');
-    const buffer = Buffer.from(base64Data, 'base64');
-    const img = await loadImage(buffer);
-
-    const c = createCanvas(img.width, img.height);
-    const ctx = c.getContext('2d');
+    // Load into canvas to add timestamp
+    const img = await loadImage(screenshotBuffer);
+    const canvas = createCanvas(img.width, img.height);
+    const ctx = canvas.getContext('2d');
     ctx.drawImage(img, 0, 0);
 
-    // Draw black timestamp bottom-left
-    const timestamp = new Date().toLocaleString();
+    // Add timestamp
+    const timestamp = new Date().toISOString().replace('T', ' ').split('.')[0];
+    ctx.font = '30px Arial';
     ctx.fillStyle = 'black';
-    ctx.font = '20px Arial';
-    ctx.fillText(timestamp, 10, img.height - 10);
+    ctx.fillText(timestamp, 20, img.height - 20);
 
-    const out = fs.createWriteStream(IMAGE_PATH);
-    const stream = c.createPNGStream();
+    // Save final image
+    const out = fs.createWriteStream(FILE_PATH);
+    const stream = canvas.createPNGStream();
     stream.pipe(out);
-    out.on('finish', () => console.log('Radar saved with timestamp:', IMAGE_PATH));
+    out.on('finish', () => console.log('Radar saved:', FILE_PATH));
+
+    await browser.close();
 }
 
 // Fetch every 5 minutes
 cron.schedule('*/5 * * * *', fetchRadar);
 
-// First fetch immediately
+// Initial fetch
 fetchRadar();
 
-// Serve image
-app.get('/radar-latest.png', (req, res) => {
-    res.sendFile(IMAGE_PATH);
+// Serve the image
+app.get(`/${FILE_PATH}`, (req, res) => {
+    res.sendFile(`${__dirname}/${FILE_PATH}`);
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
