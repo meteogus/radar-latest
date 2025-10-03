@@ -1,4 +1,3 @@
-
 const puppeteer = require('puppeteer');
 const express = require('express');
 const fs = require('fs');
@@ -26,40 +25,27 @@ async function fetchRadar() {
         const page = await browser.newPage();
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
-        // Wait for the cookies banner if it appears and hide it
-        try {
-            await page.waitForSelector('#cookies-popup, .cookies-bar, .cookie-consent', { timeout: 5000 });
-            await page.evaluate(() => {
+        // Hide cookies bar robustly
+        await page.evaluate(() => {
+            const interval = setInterval(() => {
                 const cookieBanner = document.querySelector('#cookies-popup, .cookies-bar, .cookie-consent');
                 if (cookieBanner) cookieBanner.style.display = 'none';
-            });
-        } catch (err) {
-            console.log('No cookies bar found.');
-        }
+            }, 200); // check every 200ms
+            setTimeout(() => clearInterval(interval), 5000); // stop after 5s
+        });
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp
+        // Add timestamp (keep your current format)
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
 
         ctx.drawImage(img, 0, 0);
-
-        // Athens local time
-        const athensTime = new Date().toLocaleString('en-GB', {
-            timeZone: 'Europe/Athens',
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: false
-        });
-
-        ctx.font = '22px sans-serif';
+        ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        ctx.fillText(athensTime, 10, 30); // upper-left corner
+        const timestamp = new Date().toLocaleString(); // unchanged
+        ctx.fillText(timestamp, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
