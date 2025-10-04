@@ -64,6 +64,13 @@ async function fetchRadar() {
 // Fetch every 10 minutes
 cron.schedule('*/10 * * * *', fetchRadar);
 
+
+// Health check route for cron-job.org
+app.get('/', (req, res) => {
+    res.send('Radar service alive');
+});
+
+
 // Express route
 app.get(`/${IMAGE_PATH}`, (req, res) => {
     if (fs.existsSync(IMAGE_PATH)) {
@@ -77,4 +84,5 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
 });
+
 
