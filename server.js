@@ -1,4 +1,4 @@
- const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer');
 const express = require('express');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
@@ -82,15 +82,10 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// ✅ NEW route for manual/cron updates
-app.get('/update', async (req, res) => {
-    try {
-        await fetchRadar(); // update the radar image
-        res.send('Radar image updated successfully.');
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Error updating radar image.');
-    }
+// ✅ UPDATED route for manual/cron updates
+app.get('/update', (req, res) => {
+    fetchRadar().catch(console.error); // start fetch asynchronously
+    res.send('Radar update started');   // respond immediately
 });
 
 // Start server
