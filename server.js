@@ -1,15 +1,11 @@
 const puppeteer = require('puppeteer');
-const express = require('express');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
-const cron = require('node-cron');
 
-const app = express();
-const PORT = process.env.PORT || 10000;
-const IMAGE_PATH = 'radar-latest.png';
+const IMAGE_PATH = './radar.png';
 
-// Serve static files
-app.use(express.static(__dirname));
+// Helper sleep function
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function fetchRadar() {
     try {
@@ -39,20 +35,17 @@ async function fetchRadar() {
             timeout: 60000
         });
 
-        // Wait for cookie banner, then accept
+        // If cookie banner exists, click Accept
         try {
-            const acceptButton = await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
-            if (acceptButton) {
-                await acceptButton.click();
-                console.log('Cookie banner clicked.');
-                await page.waitForTimeout(1000); // wait for banner to disappear
-            }
+            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
+            await page.click('.cc-compliance .cc-btn');
+            console.log('Cookie banner clicked.');
         } catch {
             console.log('No cookie banner visible.');
         }
 
-        // Wait a moment for map to fully render
-        await page.waitForTimeout(2000);
+        // Wait a moment for map to load
+        await sleep(3000);
 
         const screenshotBuffer = await page.screenshot();
 
@@ -64,7 +57,7 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
         ctx.fillText(timestamp, 10, 30);
 
         const out = fs.createWriteStream(IMAGE_PATH);
@@ -79,30 +72,5 @@ async function fetchRadar() {
 }
 
 // Fetch every 10 minutes
-cron.schedule('*/10 * * * *', fetchRadar);
-
-// Express route to serve radar image
-app.get(`/${IMAGE_PATH}`, (req, res) => {
-    if (fs.existsSync(IMAGE_PATH)) {
-        res.sendFile(`${__dirname}/${IMAGE_PATH}`);
-    } else {
-        res.status(404).send('Image not found yet.');
-    }
-});
-
-// ✅ Route for manual/cron updates
-app.get('/update', async (req, res) => {
-    try {
-        await fetchRadar(); // update the radar image
-        res.send('Radar image updated successfully.');
-    } catch (err) {
-        console.error(err);
-        res.status(500).send('Error updating radar image.');
-    }
-});
-
-// Start server
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    fetchRadar(); // fetch immediately on start
-});
+fetchRadar();
+setInterval(fetchRadar, 10 * 60 * 1000);
