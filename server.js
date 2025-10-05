@@ -39,22 +39,20 @@ async function fetchRadar() {
             timeout: 60000
         });
 
-        // Remove cookie banner reliably
-        const removeCookieBanner = async () => {
-            for (let i = 0; i < 20; i++) { // ~4 seconds
-                const removed = await page.evaluate(() => {
-                    const banner = document.querySelector('.cc-window');
-                    if (banner) { banner.remove(); return true; }
-                    return false;
-                });
-                if (removed) break;
-                await new Promise(r => setTimeout(r, 200));
+        // Wait for cookie banner, then accept
+        try {
+            const acceptButton = await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
+            if (acceptButton) {
+                await acceptButton.click();
+                console.log('Cookie banner clicked.');
+                await page.waitForTimeout(1000); // wait for banner to disappear
             }
-        };
-        await removeCookieBanner();
+        } catch {
+            console.log('No cookie banner visible.');
+        }
 
-        // Wait for map to fully render
-        await new Promise(r => setTimeout(r, 3000));
+        // Wait a moment for map to fully render
+        await page.waitForTimeout(2000);
 
         const screenshotBuffer = await page.screenshot();
 
@@ -80,8 +78,8 @@ async function fetchRadar() {
     }
 }
 
-// Cron: every 10 minutes at 00,10,20,30,40,50
-cron.schedule('0,10,20,30,40,50 * * * *', fetchRadar);
+// Fetch every 10 minutes
+cron.schedule('*/10 * * * *', fetchRadar);
 
 // Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
@@ -92,10 +90,10 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// Route for manual update
+// ✅ Route for manual/cron updates
 app.get('/update', async (req, res) => {
     try {
-        await fetchRadar();
+        await fetchRadar(); // update the radar image
         res.send('Radar image updated successfully.');
     } catch (err) {
         console.error(err);
