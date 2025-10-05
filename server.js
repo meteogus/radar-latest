@@ -38,7 +38,7 @@ async function fetchRadar() {
         await page.evaluate(() => {
             document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
         });
-        await page.waitForTimeout(2000); // allow script to take effect
+        await page.waitFor(2000); // allow script to take effect
 
         // Remove cookie banner if it exists
         await page.evaluate(() => {
@@ -98,3 +98,4 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
 });
+
