@@ -38,20 +38,20 @@ async function fetchRadar() {
         await page.evaluate(() => {
             document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
         });
-        
-        
-        await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Remove cookie banner if it exists, retry a few times
-for (let i = 0; i < 5; i++) {
-    const removed = await page.evaluate(() => {
-        const banner = document.querySelector('.cc-window');
-        if (banner) { banner.remove(); return true; }
-        return false;
-    });
-    if (removed) break;
-    await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s and try again
-}
+        // Remove cookie banner reliably
+        const removeCookieBanner = async () => {
+            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
+                const removed = await page.evaluate(() => {
+                    const banner = document.querySelector('.cc-window');
+                    if (banner) { banner.remove(); return true; }
+                    return false;
+                });
+                if (removed) break;
+                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
+            }
+        };
+        await removeCookieBanner();
 
         const screenshotBuffer = await page.screenshot();
 
@@ -77,8 +77,8 @@ for (let i = 0; i < 5; i++) {
     }
 }
 
-// ✅ Cron schedule: exact 10-minute marks
-cron.schedule('0,10,20,30,40,50 * * * *', fetchRadar);
+// Fetch every 10 minutes
+cron.schedule('*/10 * * * *', fetchRadar);
 
 // Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
@@ -89,7 +89,7 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// ✅ Route for manual/UptimeRobot updates
+// ✅ Route for manual/cron updates
 app.get('/update', async (req, res) => {
     try {
         await fetchRadar(); // update the radar image
@@ -105,6 +105,3 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
 });
-
-
-
