@@ -32,7 +32,13 @@ async function fetchRadar() {
             domain: 'nowcast.meteo.noa.gr'
         });
 
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
+
+// Accept cookies by injecting JS before page fully loads
+await page.evaluate(() => {
+  document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+});
+await page.waitForTimeout(2000); // allow script to take effect
 
         // Remove cookie banner if it exists
         await page.evaluate(() => {
@@ -80,3 +86,4 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
 });
+
