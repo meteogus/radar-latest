@@ -32,9 +32,9 @@ async function fetchRadar() {
             timeout: 60000
         });
 
-        // If cookie banner exists, click Accept
+        // Wait until cookie banner is visible (if exists), then click Accept
         try {
-            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
+            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 10000 });
             await page.click('.cc-compliance .cc-btn');
             console.log('Cookie banner clicked.');
         } catch {
@@ -42,7 +42,7 @@ async function fetchRadar() {
         }
 
         // Wait a moment for map to load
-        await page.waitForTimeout(3000);
+        await new Promise(resolve => setTimeout(resolve, 3000));  // fixed waitForTimeout issue
 
         const screenshotBuffer = await page.screenshot();
 
@@ -54,7 +54,7 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
         ctx.fillText(timestamp, 10, 30);
 
         const out = fs.createWriteStream(IMAGE_PATH);
@@ -68,22 +68,19 @@ async function fetchRadar() {
     }
 }
 
-// Fetch radar every 5 minutes
-setInterval(fetchRadar, 5 * 60 * 1000);
+// Run fetchRadar once on start
 fetchRadar();
 
-// --- Web server to serve latest radar image ---
+// Optional: schedule repeated fetching
+setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
+
+// Minimal server (no index.html needed)
 const express = require('express');
 const app = express();
-
-app.get('/', (req, res) => {
-    res.sendFile(__dirname + '/index.html');
-});
-
-app.get('/radar.png', (req, res) => {
-    res.sendFile(__dirname + '/radar.png');
-});
-
-// Use Render's port
 const PORT = process.env.PORT || 10000;
-app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+
+app.use(express.static(__dirname));
+
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+});
