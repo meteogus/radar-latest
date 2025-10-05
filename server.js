@@ -26,7 +26,6 @@ async function fetchRadar() {
         const page = await browser.newPage();
 
         // Set cookies if necessary
-        // (original working code that prevents cookie bar from showing)
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
@@ -37,7 +36,7 @@ async function fetchRadar() {
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (Athens local time, day/month/year)
+        // Add timestamp (Athens local time, day/month/year, πμ/μμ)
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -45,7 +44,10 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens' }); 
+        const timestamp = new Date().toLocaleString('el-GR', { 
+            timeZone: 'Europe/Athens', 
+            hour12: true 
+        }); 
         ctx.fillText(timestamp, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
