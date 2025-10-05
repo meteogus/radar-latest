@@ -25,7 +25,7 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookies if necessary
+        // Set cookies to prevent banner
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
@@ -34,24 +34,11 @@ async function fetchRadar() {
 
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
 
-        // Accept cookies by injecting JS before page fully loads
-        await page.evaluate(() => {
-            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.nowcast.meteo.noa.gr";
-        });
-
         // Remove cookie banner reliably
-        const removeCookieBanner = async () => {
-            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
-                const removed = await page.evaluate(() => {
-                    const banner = document.querySelector('.cc-window');
-                    if (banner) { banner.remove(); return true; }
-                    return false;
-                });
-                if (removed) break;
-                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
-            }
-        };
-        await removeCookieBanner();
+        await page.evaluate(() => {
+            const banner = document.querySelector('.cc-window');
+            if (banner) banner.remove();
+        });
 
         const screenshotBuffer = await page.screenshot();
 
@@ -63,7 +50,7 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
         ctx.fillText(timestamp, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
@@ -77,8 +64,8 @@ async function fetchRadar() {
     }
 }
 
-// Fetch every 10 minutes
-cron.schedule('*/10 * * * *', fetchRadar);
+// Fetch radar image exactly at 0,10,20,30,40,50 minutes of each hour
+cron.schedule('0,10,20,30,40,50 * * * *', fetchRadar);
 
 // Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
@@ -89,10 +76,10 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// ✅ Route for manual/cron updates
+// Route for manual/uptime update
 app.get('/update', async (req, res) => {
     try {
-        await fetchRadar(); // update the radar image
+        await fetchRadar();
         res.send('Radar image updated successfully.');
     } catch (err) {
         console.error(err);
