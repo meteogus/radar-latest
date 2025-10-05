@@ -8,9 +8,6 @@ const app = express();
 const PORT = process.env.PORT || 10000;
 const IMAGE_PATH = 'radar-latest.png';
 
-// Serve all files in project folder (so /radar-latest.png works)
-app.use(express.static(__dirname));
-
 async function fetchRadar() {
     try {
         console.log('Fetching radar image...');
@@ -23,32 +20,33 @@ async function fetchRadar() {
             ]
         });
         const page = await browser.newPage();
-
-        // Optional: block cookies bar
-        await page.setRequestInterception(true);
-        page.on('request', (req) => {
-            if (req.url().includes('cookie') || req.url().includes('consent')) {
-                req.abort();
-            } else {
-                req.continue();
-            }
-        });
-
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
+
+        // Hide cookie banner if it appears
+        try {
+            await page.evaluate(() => {
+                const cookie = document.querySelector('#cookiescript_accept');
+                if (cookie) cookie.click();
+            });
+        } catch (e) {
+            console.log('No cookie popup found');
+        }
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp in Athens local time, day/month/year
+        // Add timestamp (Athens local time, dd/mm/yyyy hh:mm)
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
-
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
 
-        const athensTime = new Date().toLocaleString("en-GB", { timeZone: "Europe/Athens" });
-        ctx.fillText(athensTime, 10, 30); // upper-left corner
+        const now = new Date();
+        const athensTime = now.toLocaleString('el-GR', { timeZone: 'Europe/Athens' });
+        const [date, time] = athensTime.split(', ');
+        const formatted = `${date} ${time}`;
+        ctx.fillText(formatted, 10, 30);
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
@@ -61,17 +59,10 @@ async function fetchRadar() {
     }
 }
 
-// Fetch every 10 minutes
-cron.schedule('*/10 * * * *', fetchRadar);
+// Serve all static files in project directory
+app.use(express.static(__dirname));
 
-
-// Health check route for cron-job.org
-app.get('/', (req, res) => {
-    res.send('Radar service alive');
-});
-
-
-// Express route
+// Express route to view image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
     if (fs.existsSync(IMAGE_PATH)) {
         res.sendFile(`${__dirname}/${IMAGE_PATH}`);
@@ -80,9 +71,17 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-    fetchRadar(); // fetch immediately on start
+// ✅ Manual update route for external cron
+app.get('/update', async (req, res) => {
+    console.log('Manual update requested...');
+    await fetchRadar();
+    res.send('Radar updated successfully!');
 });
 
+// Regular Render cron (optional, backup)
+cron.schedule('*/10 * * * *', fetchRadar);
 
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    fetchRadar(); // initial fetch
+});
