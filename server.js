@@ -26,7 +26,7 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookie first to prevent banner
+        // Set cookie first
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
@@ -39,7 +39,7 @@ async function fetchRadar() {
             timeout: 60000
         });
 
-        // Try to remove cookie banner if it exists
+        // If cookie banner exists, click Accept
         try {
             await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
             await page.click('.cc-compliance .cc-btn');
@@ -48,8 +48,8 @@ async function fetchRadar() {
             console.log('No cookie banner visible.');
         }
 
-        // Wait for map to load properly
-        await page.waitForTimeout(3000);
+        // Wait a moment for map to load
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         const screenshotBuffer = await page.screenshot();
 
