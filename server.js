@@ -25,7 +25,7 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookies
+        // Set cookies if necessary
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
@@ -34,24 +34,12 @@ async function fetchRadar() {
 
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
 
-        // Inject cookie acceptance
+        // Accept cookies by clicking the accept button
         await page.evaluate(() => {
-            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+            const acceptBtn = document.querySelector('.cc-btn.cc-accept');
+            if (acceptBtn) acceptBtn.click();
         });
-
-        // Remove cookie banner reliably
-        const removeCookieBanner = async () => {
-            for (let i = 0; i < 20; i++) { // ~10 seconds max
-                const removed = await page.evaluate(() => {
-                    const banner = document.querySelector('.cc-window');
-                    if (banner) { banner.remove(); return true; }
-                    return false;
-                });
-                if (removed) break;
-                await new Promise(resolve => setTimeout(resolve, 500));
-            }
-        };
-        await removeCookieBanner();
+        await page.waitForTimeout(1000); // wait 1s for page to update
 
         const screenshotBuffer = await page.screenshot();
 
@@ -89,7 +77,7 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// Route for manual/cron updates
+// ✅ Route for manual/cron updates
 app.get('/update', async (req, res) => {
     try {
         await fetchRadar(); // update the radar image
