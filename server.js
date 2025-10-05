@@ -25,7 +25,7 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set initial cookie before visiting
+        // Preload cookie
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
@@ -33,32 +33,44 @@ async function fetchRadar() {
             path: '/'
         });
 
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-        // Try to accept cookies dynamically if banner appears
+        // Try to find and remove cookie banner (also in iframe)
         try {
-            await page.waitForSelector('.cc-window', { timeout: 5000 });
+            // Handle top-level banner
             await page.evaluate(() => {
-                const banner = document.querySelector('.cc-window');
-                const btn = document.querySelector('.cc-allow, .cc-dismiss, button');
-                if (btn) btn.click();
-                if (banner) banner.remove();
                 document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+                const banner = document.querySelector('.cc-window');
+                if (banner) banner.remove();
             });
-            console.log('✅ Cookie banner handled.');
+
+            // Handle possible iframe banner
+            const frames = page.frames();
+            for (const frame of frames) {
+                try {
+                    await frame.evaluate(() => {
+                        document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+                        const banner = document.querySelector('.cc-window');
+                        if (banner) banner.remove();
+                        const btn = document.querySelector('.cc-allow, .cc-dismiss, button');
+                        if (btn) btn.click();
+                    });
+                } catch { /* ignore */ }
+            }
+
+            console.log('✅ Cookie banner handled (iframe-safe).');
         } catch {
-            console.log('No cookie banner detected.');
+            console.log('No cookie banner found.');
         }
 
-        await new Promise(resolve => setTimeout(resolve, 1500)); // small wait for stability
+        await new Promise(resolve => setTimeout(resolve, 2000));
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (Athens local time)
+        // Add timestamp
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
-
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
@@ -101,5 +113,5 @@ app.get('/update', async (req, res) => {
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    fetchRadar(); // initial run
+    fetchRadar();
 });
