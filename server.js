@@ -39,17 +39,22 @@ async function fetchRadar() {
             timeout: 60000
         });
 
-        // If cookie banner exists, click Accept
-        try {
-            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
-            await page.click('.cc-compliance .cc-btn');
-            console.log('Cookie banner clicked.');
-        } catch {
-            console.log('No cookie banner visible.');
-        }
+        // Remove cookie banner reliably
+        const removeCookieBanner = async () => {
+            for (let i = 0; i < 20; i++) { // ~4 seconds
+                const removed = await page.evaluate(() => {
+                    const banner = document.querySelector('.cc-window');
+                    if (banner) { banner.remove(); return true; }
+                    return false;
+                });
+                if (removed) break;
+                await new Promise(r => setTimeout(r, 200));
+            }
+        };
+        await removeCookieBanner();
 
-        // Wait a moment for map to load
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        // Wait for map to fully render
+        await new Promise(r => setTimeout(r, 3000));
 
         const screenshotBuffer = await page.screenshot();
 
@@ -61,7 +66,7 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
         ctx.fillText(timestamp, 10, 30);
 
         const out = fs.createWriteStream(IMAGE_PATH);
@@ -75,8 +80,8 @@ async function fetchRadar() {
     }
 }
 
-// Fetch every 10 minutes
-cron.schedule('*/10 * * * *', fetchRadar);
+// Cron: every 10 minutes at 00,10,20,30,40,50
+cron.schedule('0,10,20,30,40,50 * * * *', fetchRadar);
 
 // Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
@@ -87,10 +92,10 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// ✅ Route for manual/cron updates
+// Route for manual update
 app.get('/update', async (req, res) => {
     try {
-        await fetchRadar(); // update the radar image
+        await fetchRadar();
         res.send('Radar image updated successfully.');
     } catch (err) {
         console.error(err);
