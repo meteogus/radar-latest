@@ -34,12 +34,25 @@ async function fetchRadar() {
 
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
 
-        // Accept cookies by clicking the accept button
+        // Accept cookies by injecting JS before page fully loads
         await page.evaluate(() => {
-            const acceptBtn = document.querySelector('.cc-btn.cc-accept');
-            if (acceptBtn) acceptBtn.click();
+            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
         });
-        await page.waitForTimeout(1000); // wait 1s for page to update
+
+        // Remove cookie banner reliably
+        const removeCookieBanner = async () => {
+            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
+                const removed = await page.evaluate(() => {
+                    const banner = document.querySelector('.cc-window');
+                    if (banner) { banner.remove(); return true; }
+                    return false;
+                });
+                if (removed) break;
+                // ✅ Replacement for waitForTimeout
+                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
+            }
+        };
+        await removeCookieBanner();
 
         const screenshotBuffer = await page.screenshot();
 
