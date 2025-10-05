@@ -32,7 +32,10 @@ async function fetchRadar() {
             domain: 'nowcast.meteo.noa.gr'
         });
 
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { 
+            waitUntil: 'domcontentloaded',
+            timeout: 60000 // increased from default 30s
+        });
 
         // Accept cookies by injecting JS before page fully loads
         await page.evaluate(() => {
@@ -48,11 +51,13 @@ async function fetchRadar() {
                     return false;
                 });
                 if (removed) break;
-                // ✅ Replacement for waitForTimeout
                 await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
             }
         };
         await removeCookieBanner();
+
+        // Wait 3s after removing banner to ensure it doesn’t reappear
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         const screenshotBuffer = await page.screenshot();
 
