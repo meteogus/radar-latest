@@ -25,40 +25,36 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookies if necessary
+        // Set initial cookie before visiting
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
-            domain: 'nowcast.meteo.noa.gr'
+            domain: '.meteo.noa.gr',
+            path: '/'
         });
 
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
 
-        // Accept cookies by injecting JS before page fully loads
-        await page.evaluate(() => {
-            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
-        });
+        // Try to accept cookies dynamically if banner appears
+        try {
+            await page.waitForSelector('.cc-window', { timeout: 5000 });
+            await page.evaluate(() => {
+                const banner = document.querySelector('.cc-window');
+                const btn = document.querySelector('.cc-allow, .cc-dismiss, button');
+                if (btn) btn.click();
+                if (banner) banner.remove();
+                document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+            });
+            console.log('✅ Cookie banner handled.');
+        } catch {
+            console.log('No cookie banner detected.');
+        }
 
-        // ✅ Fixed wait timeout (Render-safe)
-        await new Promise(resolve => setTimeout(resolve, 2000)); // allow script to take effect
-
-        // Remove cookie banner reliably
-        const removeCookieBanner = async () => {
-            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
-                const removed = await page.evaluate(() => {
-                    const banner = document.querySelector('.cc-window');
-                    if (banner) { banner.remove(); return true; }
-                    return false;
-                });
-                if (removed) break;
-                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
-            }
-        };
-        await removeCookieBanner();
+        await new Promise(resolve => setTimeout(resolve, 1500)); // small wait for stability
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (Athens local time, day/month/year, AM/PM)
+        // Add timestamp (Athens local time)
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -66,8 +62,8 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
-        ctx.fillText(timestamp, 10, 30); // upper-left corner
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
+        ctx.fillText(timestamp, 10, 30);
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
@@ -83,7 +79,7 @@ async function fetchRadar() {
 // Fetch every 10 minutes
 cron.schedule('*/10 * * * *', fetchRadar);
 
-// Express route to serve radar image
+// Serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
     if (fs.existsSync(IMAGE_PATH)) {
         res.sendFile(`${__dirname}/${IMAGE_PATH}`);
@@ -92,10 +88,10 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// ✅ Route for manual/cron updates
+// Manual trigger
 app.get('/update', async (req, res) => {
     try {
-        await fetchRadar(); // update the radar image
+        await fetchRadar();
         res.send('Radar image updated successfully.');
     } catch (err) {
         console.error(err);
@@ -103,8 +99,7 @@ app.get('/update', async (req, res) => {
     }
 });
 
-// Start server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    fetchRadar(); // fetch immediately on start
+    fetchRadar(); // initial run
 });
