@@ -24,19 +24,25 @@ async function fetchRadar() {
         });
 
         const page = await browser.newPage();
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
-        // Accept cookies reliably
+        // Set cookies if necessary
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
             domain: 'nowcast.meteo.noa.gr'
         });
-        await page.reload({ waitUntil: 'networkidle2' }); // reload after cookie
+
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
+
+        // Remove cookie banner if it exists
+        await page.evaluate(() => {
+            const cookieBanner = document.querySelector('.cc-window');
+            if (cookieBanner) cookieBanner.remove();
+        });
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (Athens local time, day/month/year, am/pm)
+        // Add timestamp (Athens local time, day/month/year, AM/PM)
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -44,10 +50,7 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', {
-            timeZone: 'Europe/Athens',
-            hour12: true
-        });
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
         ctx.fillText(timestamp, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
