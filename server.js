@@ -1,4 +1,4 @@
-const puppeteer = require('puppeteer');
+ const puppeteer = require('puppeteer');
 const express = require('express');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
@@ -34,11 +34,11 @@ async function fetchRadar() {
 
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
 
-// Accept cookies by injecting JS before page fully loads
-await page.evaluate(() => {
-  document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
-});
-await page.waitForTimeout(2000); // allow script to take effect
+        // Accept cookies by injecting JS before page fully loads
+        await page.evaluate(() => {
+            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+        });
+        await page.waitForTimeout(2000); // allow script to take effect
 
         // Remove cookie banner if it exists
         await page.evaluate(() => {
@@ -82,8 +82,19 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
+// ✅ NEW route for manual/cron updates
+app.get('/update', async (req, res) => {
+    try {
+        await fetchRadar(); // update the radar image
+        res.send('Radar image updated successfully.');
+    } catch (err) {
+        console.error(err);
+        res.status(500).send('Error updating radar image.');
+    }
+});
+
+// Start server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
 });
-
