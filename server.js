@@ -42,11 +42,16 @@ async function fetchRadar() {
         
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Remove cookie banner if it exists
-        await page.evaluate(() => {
-            const cookieBanner = document.querySelector('.cc-window');
-            if (cookieBanner) cookieBanner.remove();
-        });
+        // Remove cookie banner if it exists, retry a few times
+for (let i = 0; i < 5; i++) {
+    const removed = await page.evaluate(() => {
+        const banner = document.querySelector('.cc-window');
+        if (banner) { banner.remove(); return true; }
+        return false;
+    });
+    if (removed) break;
+    await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s and try again
+}
 
         const screenshotBuffer = await page.screenshot();
 
@@ -100,5 +105,6 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // fetch immediately on start
 });
+
 
 
