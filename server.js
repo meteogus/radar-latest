@@ -32,7 +32,7 @@ async function fetchRadar() {
             domain: 'nowcast.meteo.noa.gr'
         });
 
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
 
         // Accept cookies by injecting JS before page fully loads
         await page.evaluate(() => {
@@ -40,18 +40,15 @@ async function fetchRadar() {
         });
 
         // Remove cookie banner reliably
-        const removeCookieBanner = async () => {
-            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
-                const removed = await page.evaluate(() => {
-                    const banner = document.querySelector('.cc-window');
-                    if (banner) { banner.remove(); return true; }
-                    return false;
-                });
-                if (removed) break;
-                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
-            }
-        };
-        await removeCookieBanner();
+        try {
+            await page.waitForSelector('.cc-window', { timeout: 5000 }); // wait up to 5s
+            await page.evaluate(() => {
+                const banner = document.querySelector('.cc-window');
+                if (banner) banner.remove();
+            });
+        } catch (e) {
+            // banner not found within 5s, safe to continue
+        }
 
         const screenshotBuffer = await page.screenshot();
 
