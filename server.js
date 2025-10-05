@@ -36,7 +36,7 @@ async function fetchRadar() {
 
         // Accept cookies by injecting JS before page fully loads
         await page.evaluate(() => {
-            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.nowcast.meteo.noa.gr";
         });
 
         // Remove cookie banner reliably
