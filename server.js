@@ -25,7 +25,7 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookies if necessary
+        // Set cookie to prevent banner
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
@@ -34,33 +34,21 @@ async function fetchRadar() {
 
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
 
-        // Inject cookie directly
+        // Accept cookies by injecting JS before page fully loads
         await page.evaluate(() => {
             document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
         });
 
-        // Reliable removal of cookie banner (frames + retry)
+        // Remove cookie banner reliably
         const removeCookieBanner = async () => {
-            for (let i = 0; i < 20; i++) { // ~10 sec
+            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
                 const removed = await page.evaluate(() => {
-                    // remove main page banner
-                    const mainBanner = document.querySelector('.cc-window');
-                    if (mainBanner) { mainBanner.remove(); return true; }
-
-                    // remove banners inside iframes
-                    const iframes = Array.from(document.querySelectorAll('iframe'));
-                    let found = false;
-                    iframes.forEach(f => {
-                        try {
-                            const doc = f.contentDocument || f.contentWindow.document;
-                            const b = doc.querySelector('.cc-window');
-                            if (b) { b.remove(); found = true; }
-                        } catch(e) {}
-                    });
-                    return found;
+                    const banner = document.querySelector('.cc-window');
+                    if (banner) { banner.remove(); return true; }
+                    return false;
                 });
                 if (removed) break;
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
             }
         };
         await removeCookieBanner();
@@ -75,7 +63,7 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
+        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
         ctx.fillText(timestamp, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
@@ -89,8 +77,8 @@ async function fetchRadar() {
     }
 }
 
-// Fetch every 10 minutes
-cron.schedule('*/10 * * * *', fetchRadar);
+// Fetch every 10 minutes at :00, :10, :20, etc.
+cron.schedule('0,10,20,30,40,50 * * * *', fetchRadar);
 
 // Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
@@ -101,10 +89,10 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// Route for manual/uptime updates
+// Route for manual/cron updates
 app.get('/update', async (req, res) => {
     try {
-        await fetchRadar();
+        await fetchRadar(); // update the radar image
         res.send('Radar image updated successfully.');
     } catch (err) {
         console.error(err);
