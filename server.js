@@ -38,7 +38,23 @@ async function fetchRadar() {
         await page.evaluate(() => {
             document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
         });
-        await page.waitForTimeout(2000); // allow script to take effect
+
+        // ✅ Fixed wait timeout (Render-safe)
+        await new Promise(resolve => setTimeout(resolve, 2000)); // allow script to take effect
+
+        // Remove cookie banner reliably
+        const removeCookieBanner = async () => {
+            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
+                const removed = await page.evaluate(() => {
+                    const banner = document.querySelector('.cc-window');
+                    if (banner) { banner.remove(); return true; }
+                    return false;
+                });
+                if (removed) break;
+                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
+            }
+        };
+        await removeCookieBanner();
 
         const screenshotBuffer = await page.screenshot();
 
