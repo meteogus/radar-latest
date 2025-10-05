@@ -25,57 +25,58 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Preload cookie
+        // Set cookies if necessary
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
-            domain: '.meteo.noa.gr',
-            path: '/'
+            domain: 'nowcast.meteo.noa.gr'
         });
 
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
 
-        // Try to find and remove cookie banner (also in iframe)
-        try {
-            // Handle top-level banner
-            await page.evaluate(() => {
-                document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
-                const banner = document.querySelector('.cc-window');
-                if (banner) banner.remove();
-            });
+        // Inject cookie directly
+        await page.evaluate(() => {
+            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+        });
 
-            // Handle possible iframe banner
-            const frames = page.frames();
-            for (const frame of frames) {
-                try {
-                    await frame.evaluate(() => {
-                        document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
-                        const banner = document.querySelector('.cc-window');
-                        if (banner) banner.remove();
-                        const btn = document.querySelector('.cc-allow, .cc-dismiss, button');
-                        if (btn) btn.click();
+        // Reliable removal of cookie banner (frames + retry)
+        const removeCookieBanner = async () => {
+            for (let i = 0; i < 20; i++) { // ~10 sec
+                const removed = await page.evaluate(() => {
+                    // remove main page banner
+                    const mainBanner = document.querySelector('.cc-window');
+                    if (mainBanner) { mainBanner.remove(); return true; }
+
+                    // remove banners inside iframes
+                    const iframes = Array.from(document.querySelectorAll('iframe'));
+                    let found = false;
+                    iframes.forEach(f => {
+                        try {
+                            const doc = f.contentDocument || f.contentWindow.document;
+                            const b = doc.querySelector('.cc-window');
+                            if (b) { b.remove(); found = true; }
+                        } catch(e) {}
                     });
-                } catch { /* ignore */ }
+                    return found;
+                });
+                if (removed) break;
+                await new Promise(r => setTimeout(r, 500));
             }
-
-            console.log('✅ Cookie banner handled (iframe-safe).');
-        } catch {
-            console.log('No cookie banner found.');
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        };
+        await removeCookieBanner();
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp
+        // Add timestamp (Athens local time, day/month/year, AM/PM)
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
+
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
         const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
-        ctx.fillText(timestamp, 10, 30);
+        ctx.fillText(timestamp, 10, 30); // upper-left corner
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
@@ -91,7 +92,7 @@ async function fetchRadar() {
 // Fetch every 10 minutes
 cron.schedule('*/10 * * * *', fetchRadar);
 
-// Serve radar image
+// Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
     if (fs.existsSync(IMAGE_PATH)) {
         res.sendFile(`${__dirname}/${IMAGE_PATH}`);
@@ -100,7 +101,7 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// Manual trigger
+// Route for manual/uptime updates
 app.get('/update', async (req, res) => {
     try {
         await fetchRadar();
@@ -111,7 +112,8 @@ app.get('/update', async (req, res) => {
     }
 });
 
+// Start server
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
-    fetchRadar();
+    fetchRadar(); // fetch immediately on start
 });
