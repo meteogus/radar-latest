@@ -1,11 +1,8 @@
-const puppeteer = require('puppeteer');
+ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
 
 const IMAGE_PATH = './radar.png';
-
-// Helper sleep function
-const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 async function fetchRadar() {
     try {
@@ -45,7 +42,7 @@ async function fetchRadar() {
         }
 
         // Wait a moment for map to load
-        await sleep(3000);
+        await page.waitForTimeout(3000);
 
         const screenshotBuffer = await page.screenshot();
 
@@ -71,6 +68,22 @@ async function fetchRadar() {
     }
 }
 
-// Fetch every 10 minutes
+// Fetch radar every 5 minutes
+setInterval(fetchRadar, 5 * 60 * 1000);
 fetchRadar();
-setInterval(fetchRadar, 10 * 60 * 1000);
+
+// --- Web server to serve latest radar image ---
+const express = require('express');
+const app = express();
+
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html');
+});
+
+app.get('/radar.png', (req, res) => {
+    res.sendFile(__dirname + '/radar.png');
+});
+
+// Use Render's port
+const PORT = process.env.PORT || 10000;
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
