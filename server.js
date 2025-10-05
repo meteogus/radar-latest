@@ -2,6 +2,7 @@ const puppeteer = require('puppeteer');
 const express = require('express');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
+const cron = require('node-cron');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -69,6 +70,9 @@ async function fetchRadar() {
     }
 }
 
+// ✅ Cron schedule: exact 10-minute marks
+cron.schedule('0,10,20,30,40,50 * * * *', fetchRadar);
+
 // Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
     if (fs.existsSync(IMAGE_PATH)) {
@@ -78,7 +82,7 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// ✅ Route for UptimeRobot to trigger image update
+// ✅ Route for manual/UptimeRobot updates
 app.get('/update', async (req, res) => {
     try {
         await fetchRadar(); // update the radar image
