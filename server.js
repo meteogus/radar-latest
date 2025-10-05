@@ -1,8 +1,10 @@
- const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
+const express = require('express');
+const path = require('path');
 
-const IMAGE_PATH = './radar.png';
+const IMAGE_PATH = path.join(__dirname, 'radar-latest.png');
 
 async function fetchRadar() {
     try {
@@ -42,7 +44,7 @@ async function fetchRadar() {
         }
 
         // Wait a moment for map to load
-        await new Promise(resolve => setTimeout(resolve, 3000));  // fixed waitForTimeout issue
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         const screenshotBuffer = await page.screenshot();
 
@@ -74,11 +76,11 @@ fetchRadar();
 // Optional: schedule repeated fetching
 setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
 
-// Minimal server (no index.html needed)
-const express = require('express');
+// Minimal server to serve radar-latest.png
 const app = express();
 const PORT = process.env.PORT || 10000;
 
+// Serve the radar image
 app.use(express.static(__dirname));
 
 app.listen(PORT, () => {
