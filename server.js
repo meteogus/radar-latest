@@ -15,6 +15,7 @@ async function fetchRadar() {
     try {
         console.log('Fetching radar image...');
         const browser = await puppeteer.launch({
+            headless: true,
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -25,37 +26,34 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookie to prevent banner
+        // Set cookie first
         await page.setCookie({
             name: 'noa_radar_cookie',
             value: 'accepted',
-            domain: 'nowcast.meteo.noa.gr'
+            domain: '.meteo.noa.gr'
         });
 
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'domcontentloaded' });
-
-        // Accept cookies by injecting JS before page fully loads
-        await page.evaluate(() => {
-            document.cookie = "noa_radar_cookie=accepted; path=/; domain=.meteo.noa.gr";
+        // Go to radar page
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', {
+            waitUntil: 'networkidle2',
+            timeout: 60000
         });
 
-        // Remove cookie banner reliably
-        const removeCookieBanner = async () => {
-            for (let i = 0; i < 20; i++) { // try for ~10 seconds (20*500ms)
-                const removed = await page.evaluate(() => {
-                    const banner = document.querySelector('.cc-window');
-                    if (banner) { banner.remove(); return true; }
-                    return false;
-                });
-                if (removed) break;
-                await new Promise(resolve => setTimeout(resolve, 500)); // wait 0.5s
-            }
-        };
-        await removeCookieBanner();
+        // If cookie banner exists, click Accept
+        try {
+            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
+            await page.click('.cc-compliance .cc-btn');
+            console.log('Cookie banner clicked.');
+        } catch {
+            console.log('No cookie banner visible.');
+        }
+
+        // Wait a moment for map to load
+        await page.waitForTimeout(3000);
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (Athens local time, day/month/year, AM/PM)
+        // Add timestamp
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -64,7 +62,7 @@ async function fetchRadar() {
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
         const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true }); 
-        ctx.fillText(timestamp, 10, 30); // upper-left corner
+        ctx.fillText(timestamp, 10, 30);
 
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
@@ -77,8 +75,8 @@ async function fetchRadar() {
     }
 }
 
-// Fetch every 10 minutes at :00, :10, :20, etc.
-cron.schedule('0,10,20,30,40,50 * * * *', fetchRadar);
+// Fetch every 10 minutes
+cron.schedule('*/10 * * * *', fetchRadar);
 
 // Express route to serve radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
@@ -89,7 +87,7 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// Route for manual/cron updates
+// ✅ Route for manual/cron updates
 app.get('/update', async (req, res) => {
     try {
         await fetchRadar(); // update the radar image
