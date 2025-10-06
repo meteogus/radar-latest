@@ -1,8 +1,10 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
+const express = require('express');
 
-const IMAGE_PATH = './radar-latest.png'; // keep filename consistent with your URL
+const IMAGE_PATH = './radar-latest.png';
+const PORT = process.env.PORT || 10000;
 
 async function fetchRadar() {
     try {
@@ -25,21 +27,18 @@ async function fetchRadar() {
             timeout: 60000
         });
 
-        // Hide cookie banner if present
+        // Try to remove/accept cookie banner if it appears
         try {
-            await page.evaluate(() => {
-                const banner = document.querySelector('.cc-compliance');
-                if (banner) banner.style.display = 'none';
-            });
-            console.log('Cookie banner hidden.');
+            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
+            await page.click('.cc-compliance .cc-btn');
+            console.log('Cookie banner accepted.');
         } catch {
-            console.log('No cookie banner to hide.');
+            console.log('No cookie banner detected.');
         }
 
-        // Wait a short moment for map to load
+        // Wait a moment for map to load
         await new Promise(resolve => setTimeout(resolve, 3000));
 
-        // Take screenshot
         const screenshotBuffer = await page.screenshot();
 
         // Add timestamp
@@ -67,15 +66,11 @@ async function fetchRadar() {
 // Run fetchRadar once on start
 fetchRadar();
 
-// Optional: schedule repeated fetching every 10 minutes
-setInterval(fetchRadar, 10 * 60 * 1000);
+// Optional: schedule repeated fetching
+setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
 
-// Minimal server to serve static files
-const express = require('express');
+// Minimal server (no index.html needed)
 const app = express();
-const PORT = process.env.PORT || 10000;
-
-// Serve all files in this directory
 app.use(express.static(__dirname));
 
 app.listen(PORT, () => {
