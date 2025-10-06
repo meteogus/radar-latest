@@ -1,11 +1,8 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
-const express = require('express');
 
-const IMAGE_PATH = './radar-latest.png';
-const app = express();
-const PORT = process.env.PORT || 10000;
+const IMAGE_PATH = './radar-latest.png'; // keep filename consistent with your URL
 
 async function fetchRadar() {
     try {
@@ -22,29 +19,34 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Try to skip cookies by setting a persistent cookie before visiting
-        await page.setCookie({
-            name: 'cookieconsent_status',
-            value: 'allow',
-            domain: '.meteo.noa.gr'
-        });
-
-        // Visit the radar page directly
+        // Go to radar page
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', {
             waitUntil: 'networkidle2',
             timeout: 60000
         });
 
-        // Wait a moment for map to load
+        // Hide cookie banner if present
+        try {
+            await page.evaluate(() => {
+                const banner = document.querySelector('.cc-compliance');
+                if (banner) banner.style.display = 'none';
+            });
+            console.log('Cookie banner hidden.');
+        } catch {
+            console.log('No cookie banner to hide.');
+        }
+
+        // Wait a short moment for map to load
         await new Promise(resolve => setTimeout(resolve, 3000));
 
         // Take screenshot
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp overlay
+        // Add timestamp
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
+
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
@@ -62,23 +64,19 @@ async function fetchRadar() {
     }
 }
 
-// Fetch radar immediately and every 10 minutes
+// Run fetchRadar once on start
 fetchRadar();
+
+// Optional: schedule repeated fetching every 10 minutes
 setInterval(fetchRadar, 10 * 60 * 1000);
 
-// Serve static files (so radar-latest.png can be accessed)
+// Minimal server to serve static files
+const express = require('express');
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+// Serve all files in this directory
 app.use(express.static(__dirname));
-
-// Root route (used by cron-job.org just to ping)
-app.get('/', (req, res) => {
-    res.send('Radar service is running ✅');
-});
-
-// Optional manual refresh route (you can use this in Cron job)
-app.get('/refresh', async (req, res) => {
-    await fetchRadar();
-    res.send('Radar refreshed successfully ✅');
-});
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
