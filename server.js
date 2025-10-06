@@ -1,10 +1,8 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
-const express = require('express');
-const path = require('path');
 
-const IMAGE_PATH = path.join(__dirname, 'radar-latest.png');
+const IMAGE_PATH = './radar-latest.png';
 
 async function fetchRadar() {
     try {
@@ -21,30 +19,14 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookie first
-        await page.setCookie({
-            name: 'noa_radar_cookie',
-            value: 'accepted',
-            domain: '.meteo.noa.gr'
-        });
-
         // Go to radar page
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', {
             waitUntil: 'networkidle2',
             timeout: 60000
         });
 
-        // Wait until cookie banner is visible (if exists), then click Accept
-        try {
-            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 10000 });
-            await page.click('.cc-compliance .cc-btn');
-            console.log('Cookie banner clicked.');
-        } catch {
-            console.log('No cookie banner visible.');
-        }
-
         // Wait a moment for map to load
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 3000));  // fixed waitForTimeout issue
 
         const screenshotBuffer = await page.screenshot();
 
@@ -76,11 +58,11 @@ fetchRadar();
 // Optional: schedule repeated fetching
 setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
 
-// Minimal server to serve radar-latest.png
+// Minimal server (no index.html needed)
+const express = require('express');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Serve the radar image
 app.use(express.static(__dirname));
 
 app.listen(PORT, () => {
