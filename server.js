@@ -1,8 +1,11 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
+const express = require('express');
 
-const IMAGE_PATH = './radar.png';
+const IMAGE_PATH = './radar-latest.png';
+const app = express();
+const PORT = process.env.PORT || 10000;
 
 async function fetchRadar() {
     try {
@@ -19,40 +22,29 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookie for the correct domain
+        // Try to skip cookies by setting a persistent cookie before visiting
         await page.setCookie({
-            name: 'noa_radar_cookie',
-            value: 'accepted',
-            domain: 'nowcast.meteo.noa.gr',
-            path: '/',
-            expires: (Date.now() / 1000) + 31536000 // 1 year
+            name: 'cookieconsent_status',
+            value: 'allow',
+            domain: '.meteo.noa.gr'
         });
 
-        // Go to radar page
+        // Visit the radar page directly
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', {
             waitUntil: 'networkidle2',
             timeout: 60000
         });
 
-        // Wait until cookie banner is visible (if exists), then click Accept
-        try {
-            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 10000 });
-            await page.click('.cc-compliance .cc-btn');
-            console.log('Cookie banner clicked.');
-        } catch {
-            console.log('No cookie banner visible.');
-        }
-
         // Wait a moment for map to load
-        await new Promise(resolve => setTimeout(resolve, 3000));  // fixed waitForTimeout issue
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
+        // Take screenshot
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp
+        // Add timestamp overlay
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
-
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
@@ -70,18 +62,23 @@ async function fetchRadar() {
     }
 }
 
-// Run fetchRadar once on start
+// Fetch radar immediately and every 10 minutes
 fetchRadar();
+setInterval(fetchRadar, 10 * 60 * 1000);
 
-// Optional: schedule repeated fetching
-setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
-
-// Minimal server (no index.html needed)
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 10000;
-
+// Serve static files (so radar-latest.png can be accessed)
 app.use(express.static(__dirname));
+
+// Root route (used by cron-job.org just to ping)
+app.get('/', (req, res) => {
+    res.send('Radar service is running ✅');
+});
+
+// Optional manual refresh route (you can use this in Cron job)
+app.get('/refresh', async (req, res) => {
+    await fetchRadar();
+    res.send('Radar refreshed successfully ✅');
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
