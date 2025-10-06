@@ -1,8 +1,11 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
+const express = require('express');
 
 const IMAGE_PATH = './radar.png';
+const app = express();
+const PORT = process.env.PORT || 10000;
 
 async function fetchRadar() {
     try {
@@ -42,7 +45,7 @@ async function fetchRadar() {
         }
 
         // Wait a moment for map to load
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await new Promise(resolve => setTimeout(resolve, 3000)); // fixed waitForTimeout issue
 
         const screenshotBuffer = await page.screenshot();
 
@@ -71,15 +74,21 @@ async function fetchRadar() {
 // Run fetchRadar once on start
 fetchRadar();
 
-// Optional: schedule repeated fetching
+// Optional: schedule repeated fetching every 10 minutes
 setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
 
 // Minimal server (no index.html needed)
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 10000;
-
 app.use(express.static(__dirname));
+
+// Cron job endpoint
+app.get('/fetch', async (req, res) => {
+    try {
+        await fetchRadar();
+        res.send('Radar fetched successfully');
+    } catch (err) {
+        res.status(500).send('Error fetching radar');
+    }
+});
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
