@@ -3,7 +3,7 @@ const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
 const express = require('express');
 
-const IMAGE_PATH = './radar.png';
+const IMAGE_PATH = './radar-latest.png';
 const app = express();
 const PORT = process.env.PORT || 10000;
 
@@ -93,3 +93,4 @@ app.get('/fetch', async (req, res) => {
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
