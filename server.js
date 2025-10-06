@@ -4,8 +4,8 @@ const { createCanvas, loadImage } = require('canvas');
 const express = require('express');
 
 const IMAGE_PATH = './radar-latest.png';
-const app = express();
 const PORT = process.env.PORT || 10000;
+const app = express();
 
 async function fetchRadar() {
     try {
@@ -22,34 +22,19 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
-        // Set cookie first
-        await page.setCookie({
-            name: 'noa_radar_cookie',
-            value: 'accepted',
-            domain: '.meteo.noa.gr'
-        });
-
-        // Go to radar page
+        // Go directly to radar page (no cookie banner handling)
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', {
             waitUntil: 'networkidle2',
             timeout: 60000
         });
 
-        // Wait until cookie banner is visible (if exists), then click Accept
-        try {
-            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 10000 });
-            await page.click('.cc-compliance .cc-btn');
-            console.log('Cookie banner clicked.');
-        } catch {
-            console.log('No cookie banner visible.');
-        }
+        // Wait a few seconds to ensure the radar map is fully loaded
+        await new Promise(resolve => setTimeout(resolve, 4000));
 
-        // Wait a moment for map to load
-        await new Promise(resolve => setTimeout(resolve, 3000)); // fixed waitForTimeout issue
-
+        // Take a screenshot
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp
+        // Add timestamp overlay
         const img = await loadImage(screenshotBuffer);
         const canvas = createCanvas(img.width, img.height);
         const ctx = canvas.getContext('2d');
@@ -57,9 +42,13 @@ async function fetchRadar() {
         ctx.drawImage(img, 0, 0);
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
-        const timestamp = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Athens', hour12: true });
+        const timestamp = new Date().toLocaleString('en-GB', {
+            timeZone: 'Europe/Athens',
+            hour12: true
+        });
         ctx.fillText(timestamp, 10, 30);
 
+        // Save image as radar-latest.png
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
         stream.pipe(out);
@@ -71,26 +60,17 @@ async function fetchRadar() {
     }
 }
 
-// Run fetchRadar once on start
+// Run once at startup
 fetchRadar();
 
-// Optional: schedule repeated fetching every 10 minutes
-setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
+// Schedule to run every 10 minutes
+setInterval(fetchRadar, 10 * 60 * 1000);
 
-// Minimal server (no index.html needed)
-app.use(express.static(__dirname));
-
-// Cron job endpoint
-app.get('/fetch', async (req, res) => {
-    try {
-        await fetchRadar();
-        res.send('Radar fetched successfully');
-    } catch (err) {
-        res.status(500).send('Error fetching radar');
-    }
+// Minimal Express server
+app.get('/radar-latest.png', (req, res) => {
+    res.sendFile(__dirname + '/radar-latest.png');
 });
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
