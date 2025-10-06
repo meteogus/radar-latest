@@ -1,10 +1,8 @@
 const puppeteer = require('puppeteer');
 const fs = require('fs');
 const { createCanvas, loadImage } = require('canvas');
-const express = require('express');
 
-const IMAGE_PATH = './radar-latest.png';
-const PORT = process.env.PORT || 10000;
+const IMAGE_PATH = './radar-latest.png'; // changed filename to match webpage URL
 
 async function fetchRadar() {
     try {
@@ -21,20 +19,24 @@ async function fetchRadar() {
 
         const page = await browser.newPage();
 
+        // Set cookie first
+        await page.setCookie({
+            name: 'noa_radar_cookie',
+            value: 'accepted',
+            domain: '.meteo.noa.gr'
+        });
+
         // Go to radar page
         await page.goto('https://nowcast.meteo.noa.gr/el/radar/', {
             waitUntil: 'networkidle2',
             timeout: 60000
         });
 
-        // Try to remove/accept cookie banner if it appears
-        try {
-            await page.waitForSelector('.cc-compliance .cc-btn', { timeout: 5000 });
-            await page.click('.cc-compliance .cc-btn');
-            console.log('Cookie banner accepted.');
-        } catch {
-            console.log('No cookie banner detected.');
-        }
+        // Remove cookie banner if it exists
+        await page.evaluate(() => {
+            const banner = document.querySelector('.cc-compliance');
+            if (banner) banner.remove();
+        });
 
         // Wait a moment for map to load
         await new Promise(resolve => setTimeout(resolve, 3000));
@@ -55,7 +57,7 @@ async function fetchRadar() {
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
         stream.pipe(out);
-        out.on('finish', () => console.log('Radar image saved.'));
+        out.on('finish', () => console.log('Radar image saved as radar-latest.png'));
 
         await browser.close();
     } catch (err) {
@@ -70,7 +72,10 @@ fetchRadar();
 setInterval(fetchRadar, 10 * 60 * 1000); // every 10 minutes
 
 // Minimal server (no index.html needed)
+const express = require('express');
 const app = express();
+const PORT = process.env.PORT || 10000;
+
 app.use(express.static(__dirname));
 
 app.listen(PORT, () => {
