@@ -7,7 +7,7 @@ const cron = require('node-cron');
 const app = express();
 const PORT = process.env.PORT || 10000;
 const IMAGE_PATH = 'radar-latest.png';
-const CROP_BOTTOM_PX = 80;
+const CROP_BOTTOM_PX = 60;
 
 async function fetchRadar() {
     try {
@@ -112,4 +112,5 @@ app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
     fetchRadar(); // initial fetch
 });
+
 
