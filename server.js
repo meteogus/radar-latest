@@ -7,6 +7,7 @@ const cron = require('node-cron');
 const app = express();
 const PORT = process.env.PORT || 10000;
 const IMAGE_PATH = 'radar-latest.png';
+const CROP_BOTTOM_PX = 100;
 
 async function fetchRadar() {
     try {
@@ -19,8 +20,11 @@ async function fetchRadar() {
                 '--disable-software-rasterizer'
             ]
         });
+
         const page = await browser.newPage();
-        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', { waitUntil: 'networkidle2' });
+        await page.goto('https://nowcast.meteo.noa.gr/el/radar/', {
+            waitUntil: 'networkidle2'
+        });
 
         // Hide cookie banner if it appears
         try {
@@ -34,11 +38,30 @@ async function fetchRadar() {
 
         const screenshotBuffer = await page.screenshot();
 
-        // Add timestamp (Athens local time, dd/mm/yyyy hh:mm)
+        // Load screenshot
         const img = await loadImage(screenshotBuffer);
-        const canvas = createCanvas(img.width, img.height);
+
+        // Crop bottom 100px
+        const croppedWidth = img.width;
+        const croppedHeight = img.height - CROP_BOTTOM_PX;
+
+        if (croppedHeight <= 0) {
+            throw new Error('Crop size larger than image height');
+        }
+
+        const canvas = createCanvas(croppedWidth, croppedHeight);
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(img, 0, 0);
+
+        // Draw image without bottom part
+        ctx.drawImage(
+            img,
+            0, 0,
+            croppedWidth, croppedHeight,
+            0, 0,
+            croppedWidth, croppedHeight
+        );
+
+        // Add timestamp (Athens local time)
         ctx.font = '20px sans-serif';
         ctx.fillStyle = 'yellow';
 
@@ -48,10 +71,14 @@ async function fetchRadar() {
         const formatted = `${date} ${time}`;
         ctx.fillText(formatted, 10, 30);
 
+        // Save image
         const out = fs.createWriteStream(IMAGE_PATH);
         const stream = canvas.createPNGStream();
         stream.pipe(out);
-        out.on('finish', () => console.log('Radar image saved.'));
+
+        out.on('finish', () => {
+            console.log('Radar image saved (cropped).');
+        });
 
         await browser.close();
     } catch (err) {
@@ -59,10 +86,10 @@ async function fetchRadar() {
     }
 }
 
-// Serve all static files in project directory
+// Serve all static files
 app.use(express.static(__dirname));
 
-// Express route to view image
+// Image route
 app.get(`/${IMAGE_PATH}`, (req, res) => {
     if (fs.existsSync(IMAGE_PATH)) {
         res.sendFile(`${__dirname}/${IMAGE_PATH}`);
@@ -71,14 +98,14 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
     }
 });
 
-// ✅ Manual update route for external cron
+// Manual update route
 app.get('/update', async (req, res) => {
     console.log('Manual update requested...');
     await fetchRadar();
     res.send('Radar updated successfully!');
 });
 
-// Regular Render cron (optional, backup)
+// Cron job every 10 minutes
 cron.schedule('*/10 * * * *', fetchRadar);
 
 app.listen(PORT, () => {
