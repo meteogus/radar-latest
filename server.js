@@ -10,13 +10,13 @@ const PORT = process.env.PORT || 10000;
 const IMAGE_PATH = 'radar-latest.png';
 const CROP_BOTTOM_PX = 70;
 
-// Prevent multiple radar fetches from running at the same time
+// Prevent two radar updates from running at the same time
 let isFetching = false;
 
 
 async function fetchRadar() {
 
-    // If another fetch is already running, skip this one
+    // Do not start another Chromium process if one is already running
     if (isFetching) {
         console.log('Radar fetch already running. Skipping this update.');
         return false;
@@ -31,7 +31,6 @@ async function fetchRadar() {
 
         console.log('Fetching radar image...');
 
-        // Launch Chromium with reduced memory usage
         browser = await puppeteer.launch({
             args: [
                 '--no-sandbox',
@@ -49,7 +48,6 @@ async function fetchRadar() {
 
         page = await browser.newPage();
 
-        // Keep the same normal browser size
         await page.setViewport({
             width: 800,
             height: 600
@@ -65,17 +63,18 @@ async function fetchRadar() {
 
         // Hide cookie banner if it appears
         try {
+
             await page.evaluate(() => {
 
-                const cookie = document.querySelector(
-                    '#cookiescript_accept'
-                );
+                const cookie =
+                    document.querySelector('#cookiescript_accept');
 
                 if (cookie) {
                     cookie.click();
                 }
 
             });
+
         } catch (e) {
 
             console.log('No cookie popup found');
@@ -95,12 +94,15 @@ async function fetchRadar() {
         let img = await loadImage(screenshotBuffer);
 
         const croppedWidth = img.width;
-        const croppedHeight = img.height - CROP_BOTTOM_PX;
+        const croppedHeight =
+            img.height - CROP_BOTTOM_PX;
 
         if (croppedHeight <= 0) {
+
             throw new Error(
                 'Crop size larger than image height'
             );
+
         }
 
         // Create canvas
@@ -130,16 +132,19 @@ async function fetchRadar() {
 
         const now = new Date();
 
-        const athensTime = now.toLocaleString(
-            'el-GR',
-            {
-                timeZone: 'Europe/Athens'
-            }
-        );
+        const athensTime =
+            now.toLocaleString(
+                'el-GR',
+                {
+                    timeZone: 'Europe/Athens'
+                }
+            );
 
-        const [date, time] = athensTime.split(', ');
+        const [date, time] =
+            athensTime.split(', ');
 
-        const formatted = `${date} ${time}`;
+        const formatted =
+            `${date} ${time}`;
 
         ctx.fillText(
             formatted,
@@ -147,29 +152,33 @@ async function fetchRadar() {
             30
         );
 
-        // Save image and WAIT until writing is finished
+        // Save image and wait until writing is complete
         await new Promise((resolve, reject) => {
 
-            const out = fs.createWriteStream(
-                IMAGE_PATH
-            );
+            const out =
+                fs.createWriteStream(IMAGE_PATH);
 
-            const stream = canvas.createPNGStream();
+            const stream =
+                canvas.createPNGStream();
 
             stream.on('error', reject);
             out.on('error', reject);
 
             out.on('finish', () => {
+
                 console.log(
                     'Radar image saved successfully.'
                 );
+
                 resolve();
+
             });
 
             stream.pipe(out);
+
         });
 
-        // Release references so memory can be reclaimed
+        // Release references
         img = null;
         canvas = null;
 
@@ -186,17 +195,23 @@ async function fetchRadar() {
 
     } finally {
 
-        // Always close page if something went wrong
+        // Always close page
         if (page) {
+
             try {
                 await page.close();
             } catch (e) {
-                console.log('Error closing page:', e.message);
+                console.log(
+                    'Error closing page:',
+                    e.message
+                );
             }
+
         }
 
         // Always close Chromium
         if (browser) {
+
             try {
                 await browser.close();
             } catch (e) {
@@ -205,23 +220,25 @@ async function fetchRadar() {
                     e.message
                 );
             }
+
         }
 
-        // Allow next update
         isFetching = false;
 
         console.log(
             'Radar fetch finished. Resources released.'
         );
+
     }
+
 }
 
 
-// Serve all static files
+// Serve static files
 app.use(express.static(__dirname));
 
 
-// Image route
+// Radar image
 app.get(`/${IMAGE_PATH}`, (req, res) => {
 
     if (fs.existsSync(IMAGE_PATH)) {
@@ -237,13 +254,13 @@ app.get(`/${IMAGE_PATH}`, (req, res) => {
         );
 
     }
+
 });
 
 
-// Manual update route
+// Manual update
 app.get('/update', async (req, res) => {
 
-    // Do not start a second Chromium instance
     if (isFetching) {
 
         return res.status(429).send(
@@ -256,7 +273,8 @@ app.get('/update', async (req, res) => {
         'Manual update requested...'
     );
 
-    const success = await fetchRadar();
+    const success =
+        await fetchRadar();
 
     if (success) {
 
@@ -271,6 +289,7 @@ app.get('/update', async (req, res) => {
         );
 
     }
+
 });
 
 
@@ -296,7 +315,7 @@ app.listen(PORT, () => {
         `Server running on port ${PORT}`
     );
 
-    // Initial radar fetch
+    // Initial update when server starts
     fetchRadar();
 
 });
